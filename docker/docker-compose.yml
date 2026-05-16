@@ -1,0 +1,21 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: smart-delivery-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: smart_delivery
+      POSTGRES_USER: smart_delivery
+      POSTGRES_PASSWORD: smart_delivery
+    ports:
+      - "5432:5432"
+    volumes:
+      - smart_delivery_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U smart_delivery -d smart_delivery"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  smart_delivery_postgres:
