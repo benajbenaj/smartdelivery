@@ -9,11 +9,12 @@ import (
 )
 
 type Config struct {
-	Addr              string
-	ReadHeaderTimeout time.Duration
-	ShutdownTimeout   time.Duration
-	RequestTimeout    time.Duration
-	DeliveryRules     DeliveryRuleService
+	Addr                string
+	ReadHeaderTimeout   time.Duration
+	ShutdownTimeout     time.Duration
+	RequestTimeout      time.Duration
+	DeliveryRules       DeliveryRuleService
+	ShopifyInstallation ShopifyInstallationService
 }
 
 func Run(ctx context.Context, cfg Config, logger *slog.Logger) error {
@@ -21,7 +22,7 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) error {
 
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           NewHandler(Dependencies{DeliveryRules: cfg.DeliveryRules, RequestTimeout: cfg.RequestTimeout}),
+		Handler:           NewHandler(Dependencies{DeliveryRules: cfg.DeliveryRules, ShopifyInstallation: cfg.ShopifyInstallation, RequestTimeout: cfg.RequestTimeout}),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 

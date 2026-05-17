@@ -22,6 +22,40 @@
         }
       }
     },
+    "/shopify/callback": {
+      "get": {
+        "summary": "Complete Shopify OAuth callback",
+        "operationId": "get_shopify_callback",
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
+    "/shopify/install": {
+      "get": {
+        "summary": "Start Shopify OAuth install",
+        "operationId": "get_shopify_install",
+        "responses": {
+          "302": {
+            "description": "Successful response"
+          },
+          "400": {
+            "description": "Bad request"
+          },
+          "500": {
+            "description": "Internal server error"
+          }
+        }
+      }
+    },
     "/shops/{shop}/delivery-rules": {
       "get": {
         "summary": "List delivery rules",

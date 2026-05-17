@@ -8,8 +8,9 @@ import (
 )
 
 type Dependencies struct {
-	DeliveryRules  DeliveryRuleService
-	RequestTimeout time.Duration
+	DeliveryRules       DeliveryRuleService
+	ShopifyInstallation ShopifyInstallationService
+	RequestTimeout      time.Duration
 }
 
 func NewHandler(deps Dependencies) http.Handler {
@@ -22,6 +23,9 @@ func NewHandler(deps Dependencies) http.Handler {
 
 	if deps.DeliveryRules != nil {
 		registerDeliveryRuleRoutes(router, deps.DeliveryRules)
+	}
+	if deps.ShopifyInstallation != nil {
+		registerShopifyRoutes(router, deps.ShopifyInstallation)
 	}
 
 	return router

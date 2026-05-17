@@ -15,6 +15,7 @@ import (
 	"smartdelivery/apps/api-go/internal/httpserver"
 	"smartdelivery/apps/api-go/internal/model"
 	"smartdelivery/apps/api-go/internal/service"
+	"smartdelivery/apps/api-go/internal/shopify"
 
 	"github.com/gin-gonic/gin"
 )
@@ -89,7 +90,8 @@ func collectRoutes() ([]gin.RouteInfo, error) {
 	gin.SetMode(gin.ReleaseMode)
 
 	handler := httpserver.NewHandler(httpserver.Dependencies{
-		DeliveryRules: docsDeliveryRuleService{},
+		DeliveryRules:       docsDeliveryRuleService{},
+		ShopifyInstallation: docsShopifyInstallationService{},
 	})
 
 	engine, ok := handler.(*gin.Engine)
@@ -122,6 +124,8 @@ func describeRoute(method string, path string) pathItem {
 	key := method + " " + path
 	summary := map[string]string{
 		"GET /healthz":                              "Health check",
+		"GET /shopify/install":                      "Start Shopify OAuth install",
+		"GET /shopify/callback":                     "Complete Shopify OAuth callback",
 		"POST /shops/{shop}/delivery-rules":         "Create delivery rule",
 		"GET /shops/{shop}/delivery-rules":          "List delivery rules",
 		"PATCH /shops/{shop}/delivery-rules/{id}":   "Update delivery rule status",
@@ -153,6 +157,9 @@ func operationID(method string, path string) string {
 }
 
 func defaultSuccessStatus(method string, path string) string {
+	if method == http.MethodGet && path == "/shopify/install" {
+		return "302"
+	}
 	if method == http.MethodPost && path == "/shops/{shop}/delivery-rules" {
 		return "201"
 	}
@@ -195,4 +202,14 @@ func (docsDeliveryRuleService) UpdateRuleStatus(context.Context, service.UpdateR
 
 func (docsDeliveryRuleService) ValidateRuleImport(context.Context, service.ValidateRuleImportCommand) (service.RuleImportValidationSummary, error) {
 	return service.RuleImportValidationSummary{}, nil
+}
+
+type docsShopifyInstallationService struct{}
+
+func (docsShopifyInstallationService) BuildInstallURL(context.Context, shopify.BuildInstallURLCommand) (string, error) {
+	return "", nil
+}
+
+func (docsShopifyInstallationService) CompleteInstall(context.Context, shopify.CompleteInstallCommand) (*model.Shop, error) {
+	return nil, nil
 }

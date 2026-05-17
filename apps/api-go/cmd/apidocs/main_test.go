@@ -26,4 +26,10 @@ func TestGenerateSpecIncludesRegisteredRoutes(t *testing.T) {
 	if _, ok := spec.Paths["/shops/{shop}/delivery-rules/imports"]["post"]; !ok {
 		t.Fatalf("spec missing POST /shops/{shop}/delivery-rules/imports")
 	}
+	if _, ok := spec.Paths["/shopify/install"]["get"]; !ok {
+		t.Fatalf("spec missing GET /shopify/install")
+	}
+	if _, ok := spec.Paths["/shopify/callback"]["get"]; !ok {
+		t.Fatalf("spec missing GET /shopify/callback")
+	}
 }

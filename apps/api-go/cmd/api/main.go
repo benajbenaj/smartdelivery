@@ -14,6 +14,7 @@ import (
 	"smartdelivery/apps/api-go/internal/httpserver"
 	"smartdelivery/apps/api-go/internal/repository"
 	"smartdelivery/apps/api-go/internal/service"
+	"smartdelivery/apps/api-go/internal/shopify"
 )
 
 func main() {
@@ -39,6 +40,7 @@ func main() {
 	}()
 
 	ruleRepository := repository.NewDeliveryRuleRepository(database)
+	shopRepository := repository.NewShopRepository(database)
 	auditWorker := audit.NewWorker(audit.NewStore(database), audit.Config{
 		BufferSize:       cfg.Audit.BufferSize,
 		OverflowBehavior: audit.OverflowBehavior(cfg.Audit.OverflowBehavior),
@@ -53,10 +55,14 @@ func main() {
 	}()
 
 	ruleService := service.NewDeliveryRuleServiceWithAudit(ruleRepository, auditWorker)
+	shopifyOAuthService := shopify.NewOAuthService(shopRepository, shopify.OAuthConfig{
+		APIKey: cfg.Shopify.APIKey,
+	})
 
 	err = httpserver.Run(ctx, httpserver.Config{
-		Addr:          cfg.HTTPAddr(),
-		DeliveryRules: ruleService,
+		Addr:                cfg.HTTPAddr(),
+		DeliveryRules:       ruleService,
+		ShopifyInstallation: shopifyOAuthService,
 	}, slog.Default())
 
 	stopAudit()
