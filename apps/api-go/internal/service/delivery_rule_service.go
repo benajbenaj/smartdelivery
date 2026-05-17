@@ -3,6 +3,8 @@ package service
 import (
 	"context"
 	"errors"
+	"sort"
+	"sync"
 
 	"smartdelivery/apps/api-go/internal/apperr"
 	"smartdelivery/apps/api-go/internal/audit"
@@ -11,6 +13,7 @@ import (
 )
 
 const defaultRulePriority = 100
+const defaultImportValidationWorkers = 4
 
 type DeliveryRuleRepository interface {
 	CreateRule(ctx context.Context, rule *model.DeliveryRule) (*model.DeliveryRule, error)
@@ -48,6 +51,35 @@ type UpdateRuleStatusCommand struct {
 	ShopID uint
 	ID     uint
 	Status model.DeliveryRuleStatus
+}
+
+type ImportRuleCommand struct {
+	Name           string
+	Priority       int
+	Status         model.DeliveryRuleStatus
+	ConditionType  model.RuleConditionType
+	ConditionValue string
+	ActionType     model.RuleActionType
+	ActionValue    string
+}
+
+type ValidateRuleImportCommand struct {
+	ShopID      uint
+	Rules       []ImportRuleCommand
+	WorkerCount int
+}
+
+type RuleImportValidationSummary struct {
+	Total   int
+	Valid   int
+	Invalid int
+	Results []RuleImportValidationResult
+}
+
+type RuleImportValidationResult struct {
+	Index  int
+	Valid  bool
+	Errors []apperr.ValidationError
 }
 
 func NewDeliveryRuleService(rules DeliveryRuleRepository) *DeliveryRuleService {
@@ -139,6 +171,70 @@ func (svc *DeliveryRuleService) UpdateRuleStatus(ctx context.Context, cmd Update
 	return rule, nil
 }
 
+func (svc *DeliveryRuleService) ValidateRuleImport(ctx context.Context, cmd ValidateRuleImportCommand) (RuleImportValidationSummary, error) {
+	if cmd.ShopID == 0 {
+		return RuleImportValidationSummary{}, &apperr.ValidationError{Field: "shop_id", Rule: "required"}
+	}
+	if len(cmd.Rules) == 0 {
+		return RuleImportValidationSummary{}, &apperr.ValidationError{Field: "rules", Rule: "min_items"}
+	}
+
+	jobs := make(chan ruleImportValidationJob)
+	results := make(chan RuleImportValidationResult, len(cmd.Rules))
+	workerCount := importValidationWorkerCount(cmd.WorkerCount, len(cmd.Rules))
+
+	var wg sync.WaitGroup
+	for range workerCount {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				results <- validateRuleImportJob(cmd.ShopID, job)
+			}
+		}()
+	}
+
+	for index, rule := range cmd.Rules {
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return RuleImportValidationSummary{}, ctx.Err()
+		case jobs <- ruleImportValidationJob{index: index, rule: rule}:
+		}
+	}
+
+	close(jobs)
+	wg.Wait()
+	close(results)
+
+	if err := ctx.Err(); err != nil {
+		return RuleImportValidationSummary{}, err
+	}
+
+	summary := RuleImportValidationSummary{
+		Total:   len(cmd.Rules),
+		Results: make([]RuleImportValidationResult, 0, len(cmd.Rules)),
+	}
+	for result := range results {
+		if result.Valid {
+			summary.Valid++
+		} else {
+			summary.Invalid++
+		}
+		summary.Results = append(summary.Results, result)
+	}
+
+	sort.Slice(summary.Results, func(i, j int) bool {
+		return summary.Results[i].Index < summary.Results[j].Index
+	})
+
+	return summary, nil
+}
+
 func (svc *DeliveryRuleService) publishAudit(ctx context.Context, event audit.Event) error {
 	if svc.audit == nil {
 		return nil
@@ -215,6 +311,73 @@ func validateUpdateRuleStatusCommand(cmd UpdateRuleStatusCommand) error {
 	}
 
 	return errors.Join(errs...)
+}
+
+type ruleImportValidationJob struct {
+	index int
+	rule  ImportRuleCommand
+}
+
+func validateRuleImportJob(shopID uint, job ruleImportValidationJob) RuleImportValidationResult {
+	err := validateCreateRuleCommand(CreateRuleCommand{
+		ShopID:         shopID,
+		Name:           job.rule.Name,
+		Priority:       job.rule.Priority,
+		Status:         job.rule.Status,
+		ConditionType:  job.rule.ConditionType,
+		ConditionValue: job.rule.ConditionValue,
+		ActionType:     job.rule.ActionType,
+		ActionValue:    job.rule.ActionValue,
+	})
+
+	validationErrors := collectValidationErrors(err)
+	return RuleImportValidationResult{
+		Index:  job.index,
+		Valid:  len(validationErrors) == 0,
+		Errors: validationErrors,
+	}
+}
+
+func collectValidationErrors(err error) []apperr.ValidationError {
+	if err == nil {
+		return nil
+	}
+
+	var result []apperr.ValidationError
+	for _, candidate := range flattenValidationErrors(err) {
+		var validationErr *apperr.ValidationError
+		if errors.As(candidate, &validationErr) {
+			result = append(result, *validationErr)
+		}
+	}
+	return result
+}
+
+func flattenValidationErrors(err error) []error {
+	if err == nil {
+		return nil
+	}
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var result []error
+		for _, child := range joined.Unwrap() {
+			result = append(result, flattenValidationErrors(child)...)
+		}
+		return result
+	}
+	return []error{err}
+}
+
+func importValidationWorkerCount(requested int, ruleCount int) int {
+	if ruleCount <= 1 {
+		return 1
+	}
+	if requested <= 0 {
+		requested = defaultImportValidationWorkers
+	}
+	if requested > ruleCount {
+		return ruleCount
+	}
+	return requested
 }
 
 func isValidRuleStatus(status model.DeliveryRuleStatus) bool {

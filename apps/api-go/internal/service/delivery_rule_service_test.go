@@ -148,6 +148,82 @@ func TestListRulesValidatesStatusFilter(t *testing.T) {
 	assertValidationError(t, err, "status", "supported_value")
 }
 
+func TestValidateRuleImportCollectsFanOutValidationResults(t *testing.T) {
+	svc := NewDeliveryRuleService(&fakeRuleRepository{})
+
+	summary, err := svc.ValidateRuleImport(context.Background(), ValidateRuleImportCommand{
+		ShopID:      1,
+		WorkerCount: 2,
+		Rules: []ImportRuleCommand{
+			validImportRuleCommand(),
+			validImportRuleCommand(func(rule *ImportRuleCommand) {
+				rule.Name = ""
+				rule.ConditionType = model.RuleConditionProductTag
+				rule.ActionType = model.RuleActionSort
+			}),
+		},
+	})
+	if err != nil {
+		t.Fatalf("ValidateRuleImport() error = %v", err)
+	}
+
+	if summary.Total != 2 {
+		t.Fatalf("Total = %d, want 2", summary.Total)
+	}
+	if summary.Valid != 1 {
+		t.Fatalf("Valid = %d, want 1", summary.Valid)
+	}
+	if summary.Invalid != 1 {
+		t.Fatalf("Invalid = %d, want 1", summary.Invalid)
+	}
+	if len(summary.Results) != 2 {
+		t.Fatalf("len(Results) = %d, want 2", len(summary.Results))
+	}
+	if !summary.Results[0].Valid {
+		t.Fatalf("first result Valid = false, want true")
+	}
+	if summary.Results[1].Valid {
+		t.Fatalf("second result Valid = true, want false")
+	}
+	assertImportValidationError(t, summary.Results[1], "name", "required")
+	assertImportValidationError(t, summary.Results[1], "action_type", "compatible_condition")
+}
+
+func TestValidateRuleImportRequiresRules(t *testing.T) {
+	svc := NewDeliveryRuleService(&fakeRuleRepository{})
+
+	_, err := svc.ValidateRuleImport(context.Background(), ValidateRuleImportCommand{ShopID: 1})
+
+	assertValidationError(t, err, "rules", "min_items")
+}
+
+func TestValidateRuleImportReturnsContextError(t *testing.T) {
+	svc := NewDeliveryRuleService(&fakeRuleRepository{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	_, err := svc.ValidateRuleImport(ctx, ValidateRuleImportCommand{
+		ShopID: 1,
+		Rules:  []ImportRuleCommand{validImportRuleCommand()},
+	})
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("ValidateRuleImport() error = %v, want context.Canceled", err)
+	}
+}
+
+func TestImportValidationWorkerCount(t *testing.T) {
+	if got := importValidationWorkerCount(2, 5); got != 2 {
+		t.Fatalf("worker count = %d, want 2", got)
+	}
+	if got := importValidationWorkerCount(0, 10); got != defaultImportValidationWorkers {
+		t.Fatalf("worker count = %d, want %d", got, defaultImportValidationWorkers)
+	}
+	if got := importValidationWorkerCount(10, 2); got != 2 {
+		t.Fatalf("worker count = %d, want 2", got)
+	}
+}
+
 func validCreateRuleCommand(mutators ...func(*CreateRuleCommand)) CreateRuleCommand {
 	cmd := CreateRuleCommand{
 		ShopID:         1,
@@ -163,6 +239,22 @@ func validCreateRuleCommand(mutators ...func(*CreateRuleCommand)) CreateRuleComm
 	}
 
 	return cmd
+}
+
+func validImportRuleCommand(mutators ...func(*ImportRuleCommand)) ImportRuleCommand {
+	rule := ImportRuleCommand{
+		Name:           "Hide express for hazardous products",
+		ConditionType:  model.RuleConditionProductTag,
+		ConditionValue: "hazardous",
+		ActionType:     model.RuleActionHide,
+		ActionValue:    "express",
+	}
+
+	for _, mutate := range mutators {
+		mutate(&rule)
+	}
+
+	return rule
 }
 
 func assertValidationError(t *testing.T, err error, field string, rule string) {
@@ -195,6 +287,18 @@ func assertJoinedValidationError(t *testing.T, err error, field string, rule str
 	}
 
 	t.Fatalf("joined error %v does not contain ValidationError{%q, %q}", err, field, rule)
+}
+
+func assertImportValidationError(t *testing.T, result RuleImportValidationResult, field string, rule string) {
+	t.Helper()
+
+	for _, validationErr := range result.Errors {
+		if validationErr.Field == field && validationErr.Rule == rule {
+			return
+		}
+	}
+
+	t.Fatalf("result %+v does not contain ValidationError{%q, %q}", result, field, rule)
 }
 
 func flattenErrors(err error) []error {

@@ -111,6 +111,59 @@ func TestPatchDeliveryRuleStatusEndpoint(t *testing.T) {
 	}
 }
 
+func TestImportDeliveryRulesEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rules := &fakeDeliveryRuleService{
+		importResult: service.RuleImportValidationSummary{
+			Total:   2,
+			Valid:   1,
+			Invalid: 1,
+			Results: []service.RuleImportValidationResult{
+				{Index: 0, Valid: true},
+				{
+					Index: 1,
+					Valid: false,
+					Errors: []apperr.ValidationError{
+						{Field: "name", Rule: "required"},
+					},
+				},
+			},
+		},
+	}
+
+	body := `{"worker_count":2,"rules":[{"name":"Hide express","condition_type":"product_tag","condition_value":"hazardous","action_type":"hide","action_value":"express"},{"condition_type":"product_tag","condition_value":"hazardous","action_type":"hide","action_value":"express"}]}`
+	response := performRequest(NewHandler(Dependencies{DeliveryRules: rules}), http.MethodPost, "/shops/42/delivery-rules/imports", body)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusOK, response.Body.String())
+	}
+	if rules.importCmd.ShopID != 42 {
+		t.Fatalf("ShopID = %d, want 42", rules.importCmd.ShopID)
+	}
+	if rules.importCmd.WorkerCount != 2 {
+		t.Fatalf("WorkerCount = %d, want 2", rules.importCmd.WorkerCount)
+	}
+	if len(rules.importCmd.Rules) != 2 {
+		t.Fatalf("len(Rules) = %d, want 2", len(rules.importCmd.Rules))
+	}
+
+	var payload importDeliveryRulesResponse
+	decodeResponse(t, response, &payload)
+	if payload.Total != 2 {
+		t.Fatalf("Total = %d, want 2", payload.Total)
+	}
+	if payload.Invalid != 1 {
+		t.Fatalf("Invalid = %d, want 1", payload.Invalid)
+	}
+	if len(payload.Results) != 2 {
+		t.Fatalf("len(Results) = %d, want 2", len(payload.Results))
+	}
+	if payload.Results[1].Errors[0].Field != "name" {
+		t.Fatalf("error field = %q, want name", payload.Results[1].Errors[0].Field)
+	}
+}
+
 func TestDeliveryRuleEndpointMapsValidationError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
@@ -221,6 +274,9 @@ type fakeDeliveryRuleService struct {
 	updateCmd                service.UpdateRuleStatusCommand
 	updateResult             *model.DeliveryRule
 	updateErr                error
+	importCmd                service.ValidateRuleImportCommand
+	importResult             service.RuleImportValidationSummary
+	importErr                error
 }
 
 func (svc *fakeDeliveryRuleService) CreateRule(_ context.Context, cmd service.CreateRuleCommand) (*model.DeliveryRule, error) {
@@ -241,4 +297,9 @@ func (svc *fakeDeliveryRuleService) ListRules(ctx context.Context, cmd service.L
 func (svc *fakeDeliveryRuleService) UpdateRuleStatus(_ context.Context, cmd service.UpdateRuleStatusCommand) (*model.DeliveryRule, error) {
 	svc.updateCmd = cmd
 	return svc.updateResult, svc.updateErr
+}
+
+func (svc *fakeDeliveryRuleService) ValidateRuleImport(_ context.Context, cmd service.ValidateRuleImportCommand) (service.RuleImportValidationSummary, error) {
+	svc.importCmd = cmd
+	return svc.importResult, svc.importErr
 }
