@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"sort"
-	"sync"
 
 	"smartdelivery/apps/api-go/internal/apperr"
 	"smartdelivery/apps/api-go/internal/audit"
 	"smartdelivery/apps/api-go/internal/model"
 	"smartdelivery/apps/api-go/internal/repository"
+	workerpkg "smartdelivery/apps/api-go/internal/worker"
 )
 
 const defaultRulePriority = 100
@@ -77,9 +77,10 @@ type RuleImportValidationSummary struct {
 }
 
 type RuleImportValidationResult struct {
-	Index  int
-	Valid  bool
-	Errors []apperr.ValidationError
+	Index     int
+	RowNumber int
+	Valid     bool
+	Errors    []apperr.ValidationError
 }
 
 func NewDeliveryRuleService(rules DeliveryRuleRepository) *DeliveryRuleService {
@@ -180,40 +181,25 @@ func (svc *DeliveryRuleService) ValidateRuleImport(ctx context.Context, cmd Vali
 	}
 
 	jobs := make(chan ruleImportValidationJob)
-	results := make(chan RuleImportValidationResult, len(cmd.Rules))
 	workerCount := importValidationWorkerCount(cmd.WorkerCount, len(cmd.Rules))
 
-	var wg sync.WaitGroup
-	for range workerCount {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for job := range jobs {
-				if ctx.Err() != nil {
-					return
-				}
-				results <- validateRuleImportJob(cmd.ShopID, job)
-			}
-		}()
-	}
+	workerResults := workerpkg.FanOut(ctx, workerCount, jobs, func(_ context.Context, job ruleImportValidationJob) (RuleImportValidationResult, bool) {
+		return validateRuleImportJob(cmd.ShopID, job), true
+	})
+	results := workerpkg.FanIn(ctx, len(cmd.Rules), workerResults...)
 
 	for index, rule := range cmd.Rules {
 		select {
 		case <-ctx.Done():
 			close(jobs)
-			wg.Wait()
+			for range results {
+			}
 			return RuleImportValidationSummary{}, ctx.Err()
 		case jobs <- ruleImportValidationJob{index: index, rule: rule}:
 		}
 	}
 
 	close(jobs)
-	wg.Wait()
-	close(results)
-
-	if err := ctx.Err(); err != nil {
-		return RuleImportValidationSummary{}, err
-	}
 
 	summary := RuleImportValidationSummary{
 		Total:   len(cmd.Rules),
@@ -226,6 +212,10 @@ func (svc *DeliveryRuleService) ValidateRuleImport(ctx context.Context, cmd Vali
 			summary.Invalid++
 		}
 		summary.Results = append(summary.Results, result)
+	}
+
+	if err := ctx.Err(); err != nil {
+		return RuleImportValidationSummary{}, err
 	}
 
 	sort.Slice(summary.Results, func(i, j int) bool {
@@ -332,9 +322,10 @@ func validateRuleImportJob(shopID uint, job ruleImportValidationJob) RuleImportV
 
 	validationErrors := collectValidationErrors(err)
 	return RuleImportValidationResult{
-		Index:  job.index,
-		Valid:  len(validationErrors) == 0,
-		Errors: validationErrors,
+		Index:     job.index,
+		RowNumber: job.index + 1,
+		Valid:     len(validationErrors) == 0,
+		Errors:    validationErrors,
 	}
 }
 

@@ -185,6 +185,12 @@ func TestValidateRuleImportCollectsFanOutValidationResults(t *testing.T) {
 	if summary.Results[1].Valid {
 		t.Fatalf("second result Valid = true, want false")
 	}
+	if summary.Results[0].RowNumber != 1 {
+		t.Fatalf("first row number = %d, want 1", summary.Results[0].RowNumber)
+	}
+	if summary.Results[1].RowNumber != 2 {
+		t.Fatalf("second row number = %d, want 2", summary.Results[1].RowNumber)
+	}
 	assertImportValidationError(t, summary.Results[1], "name", "required")
 	assertImportValidationError(t, summary.Results[1], "action_type", "compatible_condition")
 }

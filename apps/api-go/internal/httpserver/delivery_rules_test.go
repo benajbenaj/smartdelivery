@@ -120,10 +120,11 @@ func TestImportDeliveryRulesEndpoint(t *testing.T) {
 			Valid:   1,
 			Invalid: 1,
 			Results: []service.RuleImportValidationResult{
-				{Index: 0, Valid: true},
+				{Index: 0, RowNumber: 1, Valid: true},
 				{
-					Index: 1,
-					Valid: false,
+					Index:     1,
+					RowNumber: 2,
+					Valid:     false,
 					Errors: []apperr.ValidationError{
 						{Field: "name", Rule: "required"},
 					},
@@ -158,6 +159,9 @@ func TestImportDeliveryRulesEndpoint(t *testing.T) {
 	}
 	if len(payload.Results) != 2 {
 		t.Fatalf("len(Results) = %d, want 2", len(payload.Results))
+	}
+	if payload.Results[1].RowNumber != 2 {
+		t.Fatalf("RowNumber = %d, want 2", payload.Results[1].RowNumber)
 	}
 	if payload.Results[1].Errors[0].Field != "name" {
 		t.Fatalf("error field = %q, want name", payload.Results[1].Errors[0].Field)

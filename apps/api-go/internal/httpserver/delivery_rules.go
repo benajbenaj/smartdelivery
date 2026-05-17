@@ -65,9 +65,10 @@ type importDeliveryRulesResponse struct {
 }
 
 type importDeliveryRuleValidation struct {
-	Index  int                       `json:"index"`
-	Valid  bool                      `json:"valid"`
-	Errors []validationErrorResponse `json:"errors,omitempty"`
+	Index     int                       `json:"index"`
+	RowNumber int                       `json:"row_number"`
+	Valid     bool                      `json:"valid"`
+	Errors    []validationErrorResponse `json:"errors,omitempty"`
 }
 
 func registerDeliveryRuleRoutes(router *gin.Engine, rules DeliveryRuleService) {
@@ -224,8 +225,9 @@ func toImportDeliveryRulesResponse(summary service.RuleImportValidationSummary) 
 	}
 	for _, result := range summary.Results {
 		item := importDeliveryRuleValidation{
-			Index: result.Index,
-			Valid: result.Valid,
+			Index:     result.Index,
+			RowNumber: result.RowNumber,
+			Valid:     result.Valid,
 		}
 		for _, validationErr := range result.Errors {
 			item.Errors = append(item.Errors, validationErrorResponse{
