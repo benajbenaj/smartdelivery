@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -72,6 +73,18 @@ func TestWriteErrorMapsAppErrorsToStatusCodes(t *testing.T) {
 			err:        apperr.ErrConflict,
 			wantStatus: http.StatusConflict,
 			wantError:  "conflict",
+		},
+		{
+			name:       "deadline exceeded",
+			err:        context.DeadlineExceeded,
+			wantStatus: http.StatusGatewayTimeout,
+			wantError:  "request deadline exceeded",
+		},
+		{
+			name:       "canceled",
+			err:        context.Canceled,
+			wantStatus: http.StatusRequestTimeout,
+			wantError:  "request canceled",
 		},
 		{
 			name:       "internal",

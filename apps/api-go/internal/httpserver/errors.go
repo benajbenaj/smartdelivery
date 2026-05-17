@@ -1,6 +1,7 @@
 package httpserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -50,6 +51,10 @@ func writeError(ctx *gin.Context, err error) {
 	}
 
 	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		ctx.JSON(http.StatusGatewayTimeout, errorResponse{Error: "request deadline exceeded"})
+	case errors.Is(err, context.Canceled):
+		ctx.JSON(http.StatusRequestTimeout, errorResponse{Error: "request canceled"})
 	case errors.Is(err, apperr.ErrNotFound):
 		ctx.JSON(http.StatusNotFound, errorResponse{Error: "not found"})
 	case errors.Is(err, apperr.ErrConflict):

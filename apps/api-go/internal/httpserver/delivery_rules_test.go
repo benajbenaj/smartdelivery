@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"smartdelivery/apps/api-go/internal/apperr"
 	"smartdelivery/apps/api-go/internal/model"
@@ -169,6 +170,26 @@ func TestDeliveryRuleEndpointRejectsInvalidPathParam(t *testing.T) {
 	}
 }
 
+func TestRequestTimeoutCancelsServiceContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rules := &fakeDeliveryRuleService{waitForListContextCancel: true}
+
+	response := performRequest(
+		NewHandler(Dependencies{DeliveryRules: rules, RequestTimeout: time.Nanosecond}),
+		http.MethodGet,
+		"/shops/42/delivery-rules",
+		"",
+	)
+
+	if response.Code != http.StatusGatewayTimeout {
+		t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusGatewayTimeout, response.Body.String())
+	}
+	if !errors.Is(rules.listContextErr, context.DeadlineExceeded) {
+		t.Fatalf("listContextErr = %v, want DeadlineExceeded", rules.listContextErr)
+	}
+}
+
 func performRequest(handler http.Handler, method string, path string, body string) *httptest.ResponseRecorder {
 	request := httptest.NewRequest(method, path, strings.NewReader(body))
 	if body != "" {
@@ -189,15 +210,17 @@ func decodeResponse(t *testing.T, response *httptest.ResponseRecorder, target an
 }
 
 type fakeDeliveryRuleService struct {
-	createCmd    service.CreateRuleCommand
-	createResult *model.DeliveryRule
-	createErr    error
-	listCmd      service.ListRulesCommand
-	listResult   []*model.DeliveryRule
-	listErr      error
-	updateCmd    service.UpdateRuleStatusCommand
-	updateResult *model.DeliveryRule
-	updateErr    error
+	createCmd                service.CreateRuleCommand
+	createResult             *model.DeliveryRule
+	createErr                error
+	listCmd                  service.ListRulesCommand
+	listResult               []*model.DeliveryRule
+	listErr                  error
+	listContextErr           error
+	waitForListContextCancel bool
+	updateCmd                service.UpdateRuleStatusCommand
+	updateResult             *model.DeliveryRule
+	updateErr                error
 }
 
 func (svc *fakeDeliveryRuleService) CreateRule(_ context.Context, cmd service.CreateRuleCommand) (*model.DeliveryRule, error) {
@@ -205,8 +228,13 @@ func (svc *fakeDeliveryRuleService) CreateRule(_ context.Context, cmd service.Cr
 	return svc.createResult, svc.createErr
 }
 
-func (svc *fakeDeliveryRuleService) ListRules(_ context.Context, cmd service.ListRulesCommand) ([]*model.DeliveryRule, error) {
+func (svc *fakeDeliveryRuleService) ListRules(ctx context.Context, cmd service.ListRulesCommand) ([]*model.DeliveryRule, error) {
 	svc.listCmd = cmd
+	if svc.waitForListContextCancel {
+		<-ctx.Done()
+		svc.listContextErr = ctx.Err()
+		return nil, svc.listContextErr
+	}
 	return svc.listResult, svc.listErr
 }
 

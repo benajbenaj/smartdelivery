@@ -112,7 +112,8 @@ func mapDatabaseError(err error) error {
 		return fmt.Errorf("%w: delivery rule", apperr.ErrNotFound)
 	}
 
-	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
 		switch pgErr.Code {
 		case "23505":
 			return fmt.Errorf("%w: %s", apperr.ErrConflict, pgErr.ConstraintName)
