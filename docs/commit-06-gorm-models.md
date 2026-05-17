@@ -8,7 +8,7 @@ The first persistence models are:
 - `DeliveryRule`
 - `AuditLog`
 
-They live in `apps/api-go/internal/db` because they describe the database shape.
+They live in `apps/api-go/internal/model` because they describe persisted data shapes used by GORM and GORM Gen.
 
 ## GORM Tags
 
