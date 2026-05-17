@@ -16,6 +16,7 @@ func main() {
 		model.Shop{},
 		model.DeliveryRule{},
 		model.AuditLog{},
+		model.FunctionConfigSnapshot{},
 	)
 
 	generator.Execute()

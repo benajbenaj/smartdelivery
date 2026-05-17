@@ -86,6 +86,19 @@ func newAuditLog(db *gorm.DB, opts ...gen.DOOption) auditLog {
 		}{
 			RelationField: field.NewRelation("Shop.AuditLogs", "model.AuditLog"),
 		},
+		ConfigSnapshots: struct {
+			field.RelationField
+			Shop struct {
+				field.RelationField
+			}
+		}{
+			RelationField: field.NewRelation("Shop.ConfigSnapshots", "model.FunctionConfigSnapshot"),
+			Shop: struct {
+				field.RelationField
+			}{
+				RelationField: field.NewRelation("Shop.ConfigSnapshots.Shop", "model.Shop"),
+			},
+		},
 	}
 
 	_auditLog.DeliveryRule = auditLogBelongsToDeliveryRule{
@@ -206,6 +219,12 @@ type auditLogBelongsToShop struct {
 	}
 	AuditLogs struct {
 		field.RelationField
+	}
+	ConfigSnapshots struct {
+		field.RelationField
+		Shop struct {
+			field.RelationField
+		}
 	}
 }
 

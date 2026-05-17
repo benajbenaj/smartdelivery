@@ -45,6 +45,19 @@ func TestAuditLogModelSchema(t *testing.T) {
 	assertTagSetting(t, model, "CreatedAt", "INDEX")
 }
 
+func TestFunctionConfigSnapshotModelSchema(t *testing.T) {
+	model := parseModel(t, &FunctionConfigSnapshot{})
+
+	if model.Table != "function_config_snapshots" {
+		t.Fatalf("table = %q, want function_config_snapshots", model.Table)
+	}
+
+	assertPrimaryKey(t, model, "ID")
+	assertTagSetting(t, model, "ShopID", "INDEX")
+	assertTagSetting(t, model, "ConfigJSON", "NOT NULL")
+	assertTagSetting(t, model, "CreatedAt", "INDEX")
+}
+
 func parseModel(t *testing.T, value any) *schema.Schema {
 	t.Helper()
 

@@ -16,44 +16,49 @@ import (
 )
 
 var (
-	Q            = new(Query)
-	AuditLog     *auditLog
-	DeliveryRule *deliveryRule
-	Shop         *shop
+	Q                      = new(Query)
+	AuditLog               *auditLog
+	DeliveryRule           *deliveryRule
+	FunctionConfigSnapshot *functionConfigSnapshot
+	Shop                   *shop
 )
 
 func SetDefault(db *gorm.DB, opts ...gen.DOOption) {
 	*Q = *Use(db, opts...)
 	AuditLog = &Q.AuditLog
 	DeliveryRule = &Q.DeliveryRule
+	FunctionConfigSnapshot = &Q.FunctionConfigSnapshot
 	Shop = &Q.Shop
 }
 
 func Use(db *gorm.DB, opts ...gen.DOOption) *Query {
 	return &Query{
-		db:           db,
-		AuditLog:     newAuditLog(db, opts...),
-		DeliveryRule: newDeliveryRule(db, opts...),
-		Shop:         newShop(db, opts...),
+		db:                     db,
+		AuditLog:               newAuditLog(db, opts...),
+		DeliveryRule:           newDeliveryRule(db, opts...),
+		FunctionConfigSnapshot: newFunctionConfigSnapshot(db, opts...),
+		Shop:                   newShop(db, opts...),
 	}
 }
 
 type Query struct {
 	db *gorm.DB
 
-	AuditLog     auditLog
-	DeliveryRule deliveryRule
-	Shop         shop
+	AuditLog               auditLog
+	DeliveryRule           deliveryRule
+	FunctionConfigSnapshot functionConfigSnapshot
+	Shop                   shop
 }
 
 func (q *Query) Available() bool { return q.db != nil }
 
 func (q *Query) clone(db *gorm.DB) *Query {
 	return &Query{
-		db:           db,
-		AuditLog:     q.AuditLog.clone(db),
-		DeliveryRule: q.DeliveryRule.clone(db),
-		Shop:         q.Shop.clone(db),
+		db:                     db,
+		AuditLog:               q.AuditLog.clone(db),
+		DeliveryRule:           q.DeliveryRule.clone(db),
+		FunctionConfigSnapshot: q.FunctionConfigSnapshot.clone(db),
+		Shop:                   q.Shop.clone(db),
 	}
 }
 
@@ -67,24 +72,27 @@ func (q *Query) WriteDB() *Query {
 
 func (q *Query) ReplaceDB(db *gorm.DB) *Query {
 	return &Query{
-		db:           db,
-		AuditLog:     q.AuditLog.replaceDB(db),
-		DeliveryRule: q.DeliveryRule.replaceDB(db),
-		Shop:         q.Shop.replaceDB(db),
+		db:                     db,
+		AuditLog:               q.AuditLog.replaceDB(db),
+		DeliveryRule:           q.DeliveryRule.replaceDB(db),
+		FunctionConfigSnapshot: q.FunctionConfigSnapshot.replaceDB(db),
+		Shop:                   q.Shop.replaceDB(db),
 	}
 }
 
 type queryCtx struct {
-	AuditLog     IAuditLogDo
-	DeliveryRule IDeliveryRuleDo
-	Shop         IShopDo
+	AuditLog               IAuditLogDo
+	DeliveryRule           IDeliveryRuleDo
+	FunctionConfigSnapshot IFunctionConfigSnapshotDo
+	Shop                   IShopDo
 }
 
 func (q *Query) WithContext(ctx context.Context) *queryCtx {
 	return &queryCtx{
-		AuditLog:     q.AuditLog.WithContext(ctx),
-		DeliveryRule: q.DeliveryRule.WithContext(ctx),
-		Shop:         q.Shop.WithContext(ctx),
+		AuditLog:               q.AuditLog.WithContext(ctx),
+		DeliveryRule:           q.DeliveryRule.WithContext(ctx),
+		FunctionConfigSnapshot: q.FunctionConfigSnapshot.WithContext(ctx),
+		Shop:                   q.Shop.WithContext(ctx),
 	}
 }
 

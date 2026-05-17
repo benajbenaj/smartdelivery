@@ -34,8 +34,9 @@ type Shop struct {
 	CreatedAt time.Time `gorm:"not null"`
 	UpdatedAt time.Time `gorm:"not null"`
 
-	DeliveryRules []DeliveryRule `gorm:"foreignKey:ShopID"`
-	AuditLogs     []AuditLog     `gorm:"foreignKey:ShopID"`
+	DeliveryRules   []DeliveryRule           `gorm:"foreignKey:ShopID"`
+	AuditLogs       []AuditLog               `gorm:"foreignKey:ShopID"`
+	ConfigSnapshots []FunctionConfigSnapshot `gorm:"foreignKey:ShopID"`
 }
 
 type DeliveryRule struct {
@@ -64,4 +65,12 @@ type AuditLog struct {
 	Event          string    `gorm:"size:128;not null;index"`
 	Message        string    `gorm:"type:text;not null"`
 	CreatedAt      time.Time `gorm:"not null;index"`
+}
+
+type FunctionConfigSnapshot struct {
+	ID         uint      `gorm:"primaryKey"`
+	ShopID     uint      `gorm:"not null;index"`
+	Shop       Shop      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:CASCADE;"`
+	ConfigJSON string    `gorm:"type:jsonb;not null"`
+	CreatedAt  time.Time `gorm:"not null;index"`
 }

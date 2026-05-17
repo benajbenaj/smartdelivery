@@ -50,6 +50,12 @@ func newShop(db *gorm.DB, opts ...gen.DOOption) shop {
 					field.RelationField
 				}
 			}
+			ConfigSnapshots struct {
+				field.RelationField
+				Shop struct {
+					field.RelationField
+				}
+			}
 		}{
 			RelationField: field.NewRelation("DeliveryRules.Shop", "model.Shop"),
 			DeliveryRules: struct {
@@ -78,6 +84,19 @@ func newShop(db *gorm.DB, opts ...gen.DOOption) shop {
 					RelationField: field.NewRelation("DeliveryRules.Shop.AuditLogs.DeliveryRule", "model.DeliveryRule"),
 				},
 			},
+			ConfigSnapshots: struct {
+				field.RelationField
+				Shop struct {
+					field.RelationField
+				}
+			}{
+				RelationField: field.NewRelation("DeliveryRules.Shop.ConfigSnapshots", "model.FunctionConfigSnapshot"),
+				Shop: struct {
+					field.RelationField
+				}{
+					RelationField: field.NewRelation("DeliveryRules.Shop.ConfigSnapshots.Shop", "model.Shop"),
+				},
+			},
 		},
 		AuditLogs: struct {
 			field.RelationField
@@ -90,6 +109,12 @@ func newShop(db *gorm.DB, opts ...gen.DOOption) shop {
 		db: db.Session(&gorm.Session{}),
 
 		RelationField: field.NewRelation("AuditLogs", "model.AuditLog"),
+	}
+
+	_shop.ConfigSnapshots = shopHasManyConfigSnapshots{
+		db: db.Session(&gorm.Session{}),
+
+		RelationField: field.NewRelation("ConfigSnapshots", "model.FunctionConfigSnapshot"),
 	}
 
 	_shop.fillFieldMap()
@@ -108,6 +133,8 @@ type shop struct {
 	DeliveryRules shopHasManyDeliveryRules
 
 	AuditLogs shopHasManyAuditLogs
+
+	ConfigSnapshots shopHasManyConfigSnapshots
 
 	fieldMap map[string]field.Expr
 }
@@ -152,7 +179,7 @@ func (s *shop) GetFieldByName(fieldName string) (field.OrderExpr, bool) {
 }
 
 func (s *shop) fillFieldMap() {
-	s.fieldMap = make(map[string]field.Expr, 6)
+	s.fieldMap = make(map[string]field.Expr, 7)
 	s.fieldMap["id"] = s.ID
 	s.fieldMap["domain"] = s.Domain
 	s.fieldMap["created_at"] = s.CreatedAt
@@ -166,6 +193,8 @@ func (s shop) clone(db *gorm.DB) shop {
 	s.DeliveryRules.db.Statement.ConnPool = db.Statement.ConnPool
 	s.AuditLogs.db = db.Session(&gorm.Session{Initialized: true})
 	s.AuditLogs.db.Statement.ConnPool = db.Statement.ConnPool
+	s.ConfigSnapshots.db = db.Session(&gorm.Session{Initialized: true})
+	s.ConfigSnapshots.db.Statement.ConnPool = db.Statement.ConnPool
 	return s
 }
 
@@ -173,6 +202,7 @@ func (s shop) replaceDB(db *gorm.DB) shop {
 	s.shopDo.ReplaceDB(db)
 	s.DeliveryRules.db = db.Session(&gorm.Session{})
 	s.AuditLogs.db = db.Session(&gorm.Session{})
+	s.ConfigSnapshots.db = db.Session(&gorm.Session{})
 	return s
 }
 
@@ -192,6 +222,12 @@ type shopHasManyDeliveryRules struct {
 				field.RelationField
 			}
 			DeliveryRule struct {
+				field.RelationField
+			}
+		}
+		ConfigSnapshots struct {
+			field.RelationField
+			Shop struct {
 				field.RelationField
 			}
 		}
@@ -353,6 +389,87 @@ func (a shopHasManyAuditLogsTx) Count() int64 {
 }
 
 func (a shopHasManyAuditLogsTx) Unscoped() *shopHasManyAuditLogsTx {
+	a.tx = a.tx.Unscoped()
+	return &a
+}
+
+type shopHasManyConfigSnapshots struct {
+	db *gorm.DB
+
+	field.RelationField
+}
+
+func (a shopHasManyConfigSnapshots) Where(conds ...field.Expr) *shopHasManyConfigSnapshots {
+	if len(conds) == 0 {
+		return &a
+	}
+
+	exprs := make([]clause.Expression, 0, len(conds))
+	for _, cond := range conds {
+		exprs = append(exprs, cond.BeCond().(clause.Expression))
+	}
+	a.db = a.db.Clauses(clause.Where{Exprs: exprs})
+	return &a
+}
+
+func (a shopHasManyConfigSnapshots) WithContext(ctx context.Context) *shopHasManyConfigSnapshots {
+	a.db = a.db.WithContext(ctx)
+	return &a
+}
+
+func (a shopHasManyConfigSnapshots) Session(session *gorm.Session) *shopHasManyConfigSnapshots {
+	a.db = a.db.Session(session)
+	return &a
+}
+
+func (a shopHasManyConfigSnapshots) Model(m *model.Shop) *shopHasManyConfigSnapshotsTx {
+	return &shopHasManyConfigSnapshotsTx{a.db.Model(m).Association(a.Name())}
+}
+
+func (a shopHasManyConfigSnapshots) Unscoped() *shopHasManyConfigSnapshots {
+	a.db = a.db.Unscoped()
+	return &a
+}
+
+type shopHasManyConfigSnapshotsTx struct{ tx *gorm.Association }
+
+func (a shopHasManyConfigSnapshotsTx) Find() (result []*model.FunctionConfigSnapshot, err error) {
+	return result, a.tx.Find(&result)
+}
+
+func (a shopHasManyConfigSnapshotsTx) Append(values ...*model.FunctionConfigSnapshot) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Append(targetValues...)
+}
+
+func (a shopHasManyConfigSnapshotsTx) Replace(values ...*model.FunctionConfigSnapshot) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Replace(targetValues...)
+}
+
+func (a shopHasManyConfigSnapshotsTx) Delete(values ...*model.FunctionConfigSnapshot) (err error) {
+	targetValues := make([]interface{}, len(values))
+	for i, v := range values {
+		targetValues[i] = v
+	}
+	return a.tx.Delete(targetValues...)
+}
+
+func (a shopHasManyConfigSnapshotsTx) Clear() error {
+	return a.tx.Clear()
+}
+
+func (a shopHasManyConfigSnapshotsTx) Count() int64 {
+	return a.tx.Count()
+}
+
+func (a shopHasManyConfigSnapshotsTx) Unscoped() *shopHasManyConfigSnapshotsTx {
 	a.tx = a.tx.Unscoped()
 	return &a
 }

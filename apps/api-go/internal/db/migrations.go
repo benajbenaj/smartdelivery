@@ -19,14 +19,14 @@ type TableStatus struct {
 }
 
 func MigrateUp(ctx context.Context, gormDB *gorm.DB) error {
-	if err := gormDB.WithContext(ctx).AutoMigrate(&model.Shop{}, &model.DeliveryRule{}, &model.AuditLog{}); err != nil {
+	if err := gormDB.WithContext(ctx).AutoMigrate(&model.Shop{}, &model.DeliveryRule{}, &model.AuditLog{}, &model.FunctionConfigSnapshot{}); err != nil {
 		return fmt.Errorf("gorm auto migrate: %w", err)
 	}
 	return nil
 }
 
 func MigrateDown(ctx context.Context, gormDB *gorm.DB) error {
-	if err := gormDB.WithContext(ctx).Migrator().DropTable(&model.AuditLog{}, &model.DeliveryRule{}, &model.Shop{}); err != nil {
+	if err := gormDB.WithContext(ctx).Migrator().DropTable(&model.FunctionConfigSnapshot{}, &model.AuditLog{}, &model.DeliveryRule{}, &model.Shop{}); err != nil {
 		return fmt.Errorf("gorm drop tables: %w", err)
 	}
 	return nil
@@ -38,6 +38,7 @@ func CheckMigrationStatus(ctx context.Context, gormDB *gorm.DB) (MigrationStatus
 		{Name: "shops", Exists: conn.Migrator().HasTable(&model.Shop{})},
 		{Name: "delivery_rules", Exists: conn.Migrator().HasTable(&model.DeliveryRule{})},
 		{Name: "audit_logs", Exists: conn.Migrator().HasTable(&model.AuditLog{})},
+		{Name: "function_config_snapshots", Exists: conn.Migrator().HasTable(&model.FunctionConfigSnapshot{})},
 	}
 
 	return MigrationStatus{Tables: tables}, nil

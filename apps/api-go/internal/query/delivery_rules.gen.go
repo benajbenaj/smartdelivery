@@ -57,6 +57,12 @@ func newDeliveryRule(db *gorm.DB, opts ...gen.DOOption) deliveryRule {
 			AuditLogs struct {
 				field.RelationField
 			}
+			ConfigSnapshots struct {
+				field.RelationField
+				Shop struct {
+					field.RelationField
+				}
+			}
 		}{
 			RelationField: field.NewRelation("AuditLogs.Shop", "model.Shop"),
 			DeliveryRules: struct {
@@ -84,6 +90,19 @@ func newDeliveryRule(db *gorm.DB, opts ...gen.DOOption) deliveryRule {
 				field.RelationField
 			}{
 				RelationField: field.NewRelation("AuditLogs.Shop.AuditLogs", "model.AuditLog"),
+			},
+			ConfigSnapshots: struct {
+				field.RelationField
+				Shop struct {
+					field.RelationField
+				}
+			}{
+				RelationField: field.NewRelation("AuditLogs.Shop.ConfigSnapshots", "model.FunctionConfigSnapshot"),
+				Shop: struct {
+					field.RelationField
+				}{
+					RelationField: field.NewRelation("AuditLogs.Shop.ConfigSnapshots.Shop", "model.Shop"),
+				},
 			},
 		},
 		DeliveryRule: struct {
@@ -226,6 +245,12 @@ type deliveryRuleHasManyAuditLogs struct {
 		}
 		AuditLogs struct {
 			field.RelationField
+		}
+		ConfigSnapshots struct {
+			field.RelationField
+			Shop struct {
+				field.RelationField
+			}
 		}
 	}
 	DeliveryRule struct {
