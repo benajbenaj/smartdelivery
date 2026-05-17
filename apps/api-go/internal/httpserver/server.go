@@ -12,6 +12,7 @@ type Config struct {
 	Addr              string
 	ReadHeaderTimeout time.Duration
 	ShutdownTimeout   time.Duration
+	DeliveryRules     DeliveryRuleService
 }
 
 func Run(ctx context.Context, cfg Config, logger *slog.Logger) error {
@@ -19,7 +20,7 @@ func Run(ctx context.Context, cfg Config, logger *slog.Logger) error {
 
 	server := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           NewHandler(),
+		Handler:           NewHandler(Dependencies{DeliveryRules: cfg.DeliveryRules}),
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
 	}
 

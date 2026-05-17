@@ -10,6 +10,8 @@ import (
 	"smartdelivery/apps/api-go/internal/config"
 	"smartdelivery/apps/api-go/internal/db"
 	"smartdelivery/apps/api-go/internal/httpserver"
+	"smartdelivery/apps/api-go/internal/repository"
+	"smartdelivery/apps/api-go/internal/service"
 )
 
 func main() {
@@ -34,7 +36,13 @@ func main() {
 		}
 	}()
 
-	if err := httpserver.Run(ctx, httpserver.Config{Addr: cfg.HTTPAddr()}, slog.Default()); err != nil {
+	ruleRepository := repository.NewDeliveryRuleRepository(database)
+	ruleService := service.NewDeliveryRuleService(ruleRepository)
+
+	if err := httpserver.Run(ctx, httpserver.Config{
+		Addr:          cfg.HTTPAddr(),
+		DeliveryRules: ruleService,
+	}, slog.Default()); err != nil {
 		slog.Error("api stopped", "error", err)
 		os.Exit(1)
 	}

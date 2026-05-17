@@ -52,6 +52,7 @@ func TestUpdateRuleStatusValidatesStatus(t *testing.T) {
 	svc := NewDeliveryRuleService(&fakeRuleRepository{})
 
 	_, err := svc.UpdateRuleStatus(context.Background(), UpdateRuleStatusCommand{
+		ShopID: 1,
 		ID:     1,
 		Status: model.DeliveryRuleStatus("archived"),
 	})
@@ -125,6 +126,6 @@ func (repo *fakeRuleRepository) ListRules(_ context.Context, _ repository.ListRu
 	return []*model.DeliveryRule{}, nil
 }
 
-func (repo *fakeRuleRepository) UpdateRuleStatus(_ context.Context, id uint, status model.DeliveryRuleStatus) (*model.DeliveryRule, error) {
-	return &model.DeliveryRule{ID: id, Status: status}, nil
+func (repo *fakeRuleRepository) UpdateRuleStatus(_ context.Context, shopID uint, id uint, status model.DeliveryRuleStatus) (*model.DeliveryRule, error) {
+	return &model.DeliveryRule{ID: id, ShopID: shopID, Status: status}, nil
 }

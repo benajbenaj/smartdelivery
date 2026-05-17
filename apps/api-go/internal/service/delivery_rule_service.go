@@ -14,7 +14,7 @@ type DeliveryRuleRepository interface {
 	CreateRule(ctx context.Context, rule *model.DeliveryRule) (*model.DeliveryRule, error)
 	GetRule(ctx context.Context, id uint) (*model.DeliveryRule, error)
 	ListRules(ctx context.Context, filter repository.ListRulesFilter) ([]*model.DeliveryRule, error)
-	UpdateRuleStatus(ctx context.Context, id uint, status model.DeliveryRuleStatus) (*model.DeliveryRule, error)
+	UpdateRuleStatus(ctx context.Context, shopID uint, id uint, status model.DeliveryRuleStatus) (*model.DeliveryRule, error)
 }
 
 type DeliveryRuleService struct {
@@ -42,6 +42,7 @@ type ListRulesCommand struct {
 }
 
 type UpdateRuleStatusCommand struct {
+	ShopID uint
 	ID     uint
 	Status model.DeliveryRuleStatus
 }
@@ -99,6 +100,9 @@ func (svc *DeliveryRuleService) ListRules(ctx context.Context, cmd ListRulesComm
 }
 
 func (svc *DeliveryRuleService) UpdateRuleStatus(ctx context.Context, cmd UpdateRuleStatusCommand) (*model.DeliveryRule, error) {
+	if cmd.ShopID == 0 {
+		return nil, &apperr.ValidationError{Field: "shop_id", Rule: "required"}
+	}
 	if cmd.ID == 0 {
 		return nil, &apperr.ValidationError{Field: "id", Rule: "required"}
 	}
@@ -106,7 +110,7 @@ func (svc *DeliveryRuleService) UpdateRuleStatus(ctx context.Context, cmd Update
 		return nil, &apperr.ValidationError{Field: "status", Rule: "supported_value"}
 	}
 
-	return svc.rules.UpdateRuleStatus(ctx, cmd.ID, cmd.Status)
+	return svc.rules.UpdateRuleStatus(ctx, cmd.ShopID, cmd.ID, cmd.Status)
 }
 
 func validateCreateRuleCommand(cmd CreateRuleCommand) error {

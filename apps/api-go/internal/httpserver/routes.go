@@ -6,10 +6,19 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func NewHandler() http.Handler {
+type Dependencies struct {
+	DeliveryRules DeliveryRuleService
+}
+
+func NewHandler(deps Dependencies) http.Handler {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
 	router.GET("/healthz", healthzHandler)
+
+	if deps.DeliveryRules != nil {
+		registerDeliveryRuleRoutes(router, deps.DeliveryRules)
+	}
+
 	return router
 }
 
