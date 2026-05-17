@@ -17,6 +17,28 @@ func TestCreateRuleValidatesRequiredFields(t *testing.T) {
 	assertValidationError(t, err, "shop_id", "required")
 }
 
+func TestCreateRuleReturnsJoinedValidationErrors(t *testing.T) {
+	svc := NewDeliveryRuleService(&fakeRuleRepository{})
+
+	_, err := svc.CreateRule(context.Background(), CreateRuleCommand{
+		Priority: -1,
+		Status:   model.DeliveryRuleStatus("archived"),
+	})
+
+	if !errors.Is(err, apperr.ErrValidation) {
+		t.Fatalf("error = %v, want ErrValidation", err)
+	}
+
+	assertJoinedValidationError(t, err, "shop_id", "required")
+	assertJoinedValidationError(t, err, "name", "required")
+	assertJoinedValidationError(t, err, "priority", "non_negative")
+	assertJoinedValidationError(t, err, "status", "supported_value")
+	assertJoinedValidationError(t, err, "condition_type", "supported_value")
+	assertJoinedValidationError(t, err, "condition_value", "required")
+	assertJoinedValidationError(t, err, "action_type", "supported_value")
+	assertJoinedValidationError(t, err, "action_value", "required")
+}
+
 func TestCreateRuleValidatesActionConditionCombination(t *testing.T) {
 	svc := NewDeliveryRuleService(&fakeRuleRepository{})
 
@@ -106,6 +128,35 @@ func assertValidationError(t *testing.T, err error, field string, rule string) {
 	if validationErr.Rule != rule {
 		t.Fatalf("Rule = %q, want %q", validationErr.Rule, rule)
 	}
+}
+
+func assertJoinedValidationError(t *testing.T, err error, field string, rule string) {
+	t.Helper()
+
+	for _, candidate := range flattenErrors(err) {
+		var validationErr *apperr.ValidationError
+		if errors.As(candidate, &validationErr) && validationErr.Field == field && validationErr.Rule == rule {
+			return
+		}
+	}
+
+	t.Fatalf("joined error %v does not contain ValidationError{%q, %q}", err, field, rule)
+}
+
+func flattenErrors(err error) []error {
+	if err == nil {
+		return nil
+	}
+
+	if joined, ok := err.(interface{ Unwrap() []error }); ok {
+		var result []error
+		for _, child := range joined.Unwrap() {
+			result = append(result, flattenErrors(child)...)
+		}
+		return result
+	}
+
+	return []error{err}
 }
 
 type fakeRuleRepository struct {

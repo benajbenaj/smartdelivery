@@ -3,6 +3,7 @@ package httpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -126,6 +127,35 @@ func TestDeliveryRuleEndpointMapsValidationError(t *testing.T) {
 	decodeResponse(t, response, &payload)
 	if payload.Field != "name" {
 		t.Fatalf("Field = %q, want name", payload.Field)
+	}
+}
+
+func TestDeliveryRuleEndpointMapsJoinedValidationErrors(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rules := &fakeDeliveryRuleService{
+		createErr: errors.Join(
+			&apperr.ValidationError{Field: "name", Rule: "required"},
+			&apperr.ValidationError{Field: "action_type", Rule: "supported_value"},
+		),
+	}
+
+	response := performRequest(NewHandler(Dependencies{DeliveryRules: rules}), http.MethodPost, "/shops/42/delivery-rules", `{}`)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d", response.Code, http.StatusBadRequest)
+	}
+
+	var payload errorResponse
+	decodeResponse(t, response, &payload)
+	if len(payload.Errors) != 2 {
+		t.Fatalf("len(payload.Errors) = %d, want 2", len(payload.Errors))
+	}
+	if payload.Errors[0].Field != "name" {
+		t.Fatalf("first field = %q, want name", payload.Errors[0].Field)
+	}
+	if payload.Errors[1].Field != "action_type" {
+		t.Fatalf("second field = %q, want action_type", payload.Errors[1].Field)
 	}
 }
 

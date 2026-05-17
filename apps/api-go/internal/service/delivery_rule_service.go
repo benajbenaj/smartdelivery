@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 
 	"smartdelivery/apps/api-go/internal/apperr"
 	"smartdelivery/apps/api-go/internal/model"
@@ -86,11 +87,8 @@ func (svc *DeliveryRuleService) GetRule(ctx context.Context, cmd GetRuleCommand)
 }
 
 func (svc *DeliveryRuleService) ListRules(ctx context.Context, cmd ListRulesCommand) ([]*model.DeliveryRule, error) {
-	if cmd.ShopID == 0 {
-		return nil, &apperr.ValidationError{Field: "shop_id", Rule: "required"}
-	}
-	if cmd.Status != nil && !isValidRuleStatus(*cmd.Status) {
-		return nil, &apperr.ValidationError{Field: "status", Rule: "supported_value"}
+	if err := validateListRulesCommand(cmd); err != nil {
+		return nil, err
 	}
 
 	return svc.rules.ListRules(ctx, repository.ListRulesFilter{
@@ -100,49 +98,78 @@ func (svc *DeliveryRuleService) ListRules(ctx context.Context, cmd ListRulesComm
 }
 
 func (svc *DeliveryRuleService) UpdateRuleStatus(ctx context.Context, cmd UpdateRuleStatusCommand) (*model.DeliveryRule, error) {
-	if cmd.ShopID == 0 {
-		return nil, &apperr.ValidationError{Field: "shop_id", Rule: "required"}
-	}
-	if cmd.ID == 0 {
-		return nil, &apperr.ValidationError{Field: "id", Rule: "required"}
-	}
-	if !isValidRuleStatus(cmd.Status) {
-		return nil, &apperr.ValidationError{Field: "status", Rule: "supported_value"}
+	if err := validateUpdateRuleStatusCommand(cmd); err != nil {
+		return nil, err
 	}
 
 	return svc.rules.UpdateRuleStatus(ctx, cmd.ShopID, cmd.ID, cmd.Status)
 }
 
 func validateCreateRuleCommand(cmd CreateRuleCommand) error {
+	var errs []error
+
 	if cmd.ShopID == 0 {
-		return &apperr.ValidationError{Field: "shop_id", Rule: "required"}
+		errs = append(errs, &apperr.ValidationError{Field: "shop_id", Rule: "required"})
 	}
 	if cmd.Name == "" {
-		return &apperr.ValidationError{Field: "name", Rule: "required"}
+		errs = append(errs, &apperr.ValidationError{Field: "name", Rule: "required"})
 	}
 	if cmd.Priority < 0 {
-		return &apperr.ValidationError{Field: "priority", Rule: "non_negative"}
+		errs = append(errs, &apperr.ValidationError{Field: "priority", Rule: "non_negative"})
 	}
 	if cmd.Status != "" && !isValidRuleStatus(cmd.Status) {
-		return &apperr.ValidationError{Field: "status", Rule: "supported_value"}
-	}
-	if !isValidConditionType(cmd.ConditionType) {
-		return &apperr.ValidationError{Field: "condition_type", Rule: "supported_value"}
-	}
-	if cmd.ConditionValue == "" {
-		return &apperr.ValidationError{Field: "condition_value", Rule: "required"}
-	}
-	if !isValidActionType(cmd.ActionType) {
-		return &apperr.ValidationError{Field: "action_type", Rule: "supported_value"}
-	}
-	if cmd.ActionValue == "" {
-		return &apperr.ValidationError{Field: "action_value", Rule: "required"}
-	}
-	if !isValidRuleCombination(cmd.ConditionType, cmd.ActionType) {
-		return &apperr.ValidationError{Field: "action_type", Rule: "compatible_condition"}
+		errs = append(errs, &apperr.ValidationError{Field: "status", Rule: "supported_value"})
 	}
 
-	return nil
+	validCondition := isValidConditionType(cmd.ConditionType)
+	if !validCondition {
+		errs = append(errs, &apperr.ValidationError{Field: "condition_type", Rule: "supported_value"})
+	}
+	if cmd.ConditionValue == "" {
+		errs = append(errs, &apperr.ValidationError{Field: "condition_value", Rule: "required"})
+	}
+
+	validAction := isValidActionType(cmd.ActionType)
+	if !validAction {
+		errs = append(errs, &apperr.ValidationError{Field: "action_type", Rule: "supported_value"})
+	}
+	if cmd.ActionValue == "" {
+		errs = append(errs, &apperr.ValidationError{Field: "action_value", Rule: "required"})
+	}
+	if validCondition && validAction && !isValidRuleCombination(cmd.ConditionType, cmd.ActionType) {
+		errs = append(errs, &apperr.ValidationError{Field: "action_type", Rule: "compatible_condition"})
+	}
+
+	return errors.Join(errs...)
+}
+
+func validateListRulesCommand(cmd ListRulesCommand) error {
+	var errs []error
+
+	if cmd.ShopID == 0 {
+		errs = append(errs, &apperr.ValidationError{Field: "shop_id", Rule: "required"})
+	}
+	if cmd.Status != nil && !isValidRuleStatus(*cmd.Status) {
+		errs = append(errs, &apperr.ValidationError{Field: "status", Rule: "supported_value"})
+	}
+
+	return errors.Join(errs...)
+}
+
+func validateUpdateRuleStatusCommand(cmd UpdateRuleStatusCommand) error {
+	var errs []error
+
+	if cmd.ShopID == 0 {
+		errs = append(errs, &apperr.ValidationError{Field: "shop_id", Rule: "required"})
+	}
+	if cmd.ID == 0 {
+		errs = append(errs, &apperr.ValidationError{Field: "id", Rule: "required"})
+	}
+	if !isValidRuleStatus(cmd.Status) {
+		errs = append(errs, &apperr.ValidationError{Field: "status", Rule: "supported_value"})
+	}
+
+	return errors.Join(errs...)
 }
 
 func isValidRuleStatus(status model.DeliveryRuleStatus) bool {
