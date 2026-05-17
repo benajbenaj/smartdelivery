@@ -8,6 +8,7 @@ import (
 
 	"smartdelivery/apps/api-go/internal/apperr"
 	"smartdelivery/apps/api-go/internal/model"
+	"smartdelivery/apps/api-go/internal/patch"
 	"smartdelivery/apps/api-go/internal/service"
 
 	"github.com/gin-gonic/gin"
@@ -35,7 +36,7 @@ type createDeliveryRuleRequest struct {
 }
 
 type updateDeliveryRuleStatusRequest struct {
-	Status model.DeliveryRuleStatus `json:"status"`
+	Status *model.DeliveryRuleStatus `json:"status"`
 }
 
 type importDeliveryRulesRequest struct {
@@ -155,11 +156,16 @@ func (handler deliveryRuleHandler) updateRuleStatus(ctx *gin.Context) {
 		return
 	}
 
-	rule, err := handler.rules.UpdateRuleStatus(ctx.Request.Context(), service.UpdateRuleStatusCommand{
+	cmd := service.UpdateRuleStatusCommand{
 		ShopID: shopID,
 		ID:     id,
-		Status: request.Status,
-	})
+	}
+	if err := patch.Apply(&cmd, request); err != nil {
+		writeBadRequest(ctx, "invalid patch body")
+		return
+	}
+
+	rule, err := handler.rules.UpdateRuleStatus(ctx.Request.Context(), cmd)
 	if err != nil {
 		writeError(ctx, err)
 		return

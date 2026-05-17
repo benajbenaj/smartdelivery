@@ -111,6 +111,23 @@ func TestPatchDeliveryRuleStatusEndpoint(t *testing.T) {
 	}
 }
 
+func TestPatchDeliveryRuleStatusEndpointRejectsMissingStatus(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	rules := &fakeDeliveryRuleService{
+		updateErr: &apperr.ValidationError{Field: "status", Rule: "supported_value"},
+	}
+
+	response := performRequest(NewHandler(Dependencies{DeliveryRules: rules}), http.MethodPatch, "/shops/42/delivery-rules/9", `{}`)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want %d, body = %s", response.Code, http.StatusBadRequest, response.Body.String())
+	}
+	if rules.updateCmd.Status != "" {
+		t.Fatalf("Status = %q, want empty", rules.updateCmd.Status)
+	}
+}
+
 func TestImportDeliveryRulesEndpoint(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
