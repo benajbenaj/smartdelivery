@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"smartdelivery/apps/api-go/internal/apperr"
+	"smartdelivery/apps/api-go/internal/audit"
 	"smartdelivery/apps/api-go/internal/model"
 	"smartdelivery/apps/api-go/internal/repository"
 )
@@ -20,6 +21,7 @@ type DeliveryRuleRepository interface {
 
 type DeliveryRuleService struct {
 	rules DeliveryRuleRepository
+	audit audit.Publisher
 }
 
 type CreateRuleCommand struct {
@@ -52,6 +54,10 @@ func NewDeliveryRuleService(rules DeliveryRuleRepository) *DeliveryRuleService {
 	return &DeliveryRuleService{rules: rules}
 }
 
+func NewDeliveryRuleServiceWithAudit(rules DeliveryRuleRepository, auditPublisher audit.Publisher) *DeliveryRuleService {
+	return &DeliveryRuleService{rules: rules, audit: auditPublisher}
+}
+
 func (svc *DeliveryRuleService) CreateRule(ctx context.Context, cmd CreateRuleCommand) (*model.DeliveryRule, error) {
 	if err := validateCreateRuleCommand(cmd); err != nil {
 		return nil, err
@@ -67,7 +73,7 @@ func (svc *DeliveryRuleService) CreateRule(ctx context.Context, cmd CreateRuleCo
 		priority = defaultRulePriority
 	}
 
-	return svc.rules.CreateRule(ctx, &model.DeliveryRule{
+	rule, err := svc.rules.CreateRule(ctx, &model.DeliveryRule{
 		ShopID:         cmd.ShopID,
 		Name:           cmd.Name,
 		Priority:       priority,
@@ -77,6 +83,20 @@ func (svc *DeliveryRuleService) CreateRule(ctx context.Context, cmd CreateRuleCo
 		ActionType:     cmd.ActionType,
 		ActionValue:    cmd.ActionValue,
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	if err := svc.publishAudit(ctx, audit.Event{
+		ShopID:         rule.ShopID,
+		DeliveryRuleID: uintPtr(rule.ID),
+		Type:           audit.EventDeliveryRuleCreated,
+		Message:        "delivery rule created",
+	}); err != nil {
+		return nil, err
+	}
+
+	return rule, nil
 }
 
 func (svc *DeliveryRuleService) GetRule(ctx context.Context, cmd GetRuleCommand) (*model.DeliveryRule, error) {
@@ -102,7 +122,32 @@ func (svc *DeliveryRuleService) UpdateRuleStatus(ctx context.Context, cmd Update
 		return nil, err
 	}
 
-	return svc.rules.UpdateRuleStatus(ctx, cmd.ShopID, cmd.ID, cmd.Status)
+	rule, err := svc.rules.UpdateRuleStatus(ctx, cmd.ShopID, cmd.ID, cmd.Status)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := svc.publishAudit(ctx, audit.Event{
+		ShopID:         rule.ShopID,
+		DeliveryRuleID: uintPtr(rule.ID),
+		Type:           audit.EventDeliveryRuleStatusUpdated,
+		Message:        "delivery rule status updated",
+	}); err != nil {
+		return nil, err
+	}
+
+	return rule, nil
+}
+
+func (svc *DeliveryRuleService) publishAudit(ctx context.Context, event audit.Event) error {
+	if svc.audit == nil {
+		return nil
+	}
+	return svc.audit.Publish(ctx, event)
+}
+
+func uintPtr(value uint) *uint {
+	return &value
 }
 
 func validateCreateRuleCommand(cmd CreateRuleCommand) error {

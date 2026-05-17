@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"smartdelivery/apps/api-go/internal/audit"
 	"smartdelivery/apps/api-go/internal/config"
 	"smartdelivery/apps/api-go/internal/db"
 	"smartdelivery/apps/api-go/internal/httpserver"
@@ -37,12 +39,28 @@ func main() {
 	}()
 
 	ruleRepository := repository.NewDeliveryRuleRepository(database)
-	ruleService := service.NewDeliveryRuleService(ruleRepository)
+	auditWorker := audit.NewWorker(audit.NewStore(database))
+	auditCtx, stopAudit := context.WithCancel(context.Background())
+	defer stopAudit()
 
-	if err := httpserver.Run(ctx, httpserver.Config{
+	auditErrCh := make(chan error, 1)
+	go func() {
+		auditErrCh <- auditWorker.Run(auditCtx)
+	}()
+
+	ruleService := service.NewDeliveryRuleServiceWithAudit(ruleRepository, auditWorker)
+
+	err = httpserver.Run(ctx, httpserver.Config{
 		Addr:          cfg.HTTPAddr(),
 		DeliveryRules: ruleService,
-	}, slog.Default()); err != nil {
+	}, slog.Default())
+
+	stopAudit()
+	if auditErr := <-auditErrCh; auditErr != nil && !errors.Is(auditErr, context.Canceled) {
+		slog.Error("audit worker stopped", "error", auditErr)
+	}
+
+	if err != nil {
 		slog.Error("api stopped", "error", err)
 		os.Exit(1)
 	}

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"smartdelivery/apps/api-go/internal/apperr"
+	"smartdelivery/apps/api-go/internal/audit"
 	"smartdelivery/apps/api-go/internal/model"
 	"smartdelivery/apps/api-go/internal/repository"
 )
@@ -70,6 +71,31 @@ func TestCreateRuleBuildsModelAndAppliesDefaults(t *testing.T) {
 	}
 }
 
+func TestCreateRulePublishesAuditEvent(t *testing.T) {
+	repo := &fakeRuleRepository{}
+	publisher := &fakeAuditPublisher{}
+	svc := NewDeliveryRuleServiceWithAudit(repo, publisher)
+
+	rule, err := svc.CreateRule(context.Background(), validCreateRuleCommand())
+	if err != nil {
+		t.Fatalf("CreateRule() error = %v", err)
+	}
+
+	if len(publisher.events) != 1 {
+		t.Fatalf("published events = %d, want 1", len(publisher.events))
+	}
+	event := publisher.events[0]
+	if event.ShopID != rule.ShopID {
+		t.Fatalf("ShopID = %d, want %d", event.ShopID, rule.ShopID)
+	}
+	if event.DeliveryRuleID == nil || *event.DeliveryRuleID != rule.ID {
+		t.Fatalf("DeliveryRuleID = %v, want %d", event.DeliveryRuleID, rule.ID)
+	}
+	if event.Type != audit.EventDeliveryRuleCreated {
+		t.Fatalf("Type = %q, want %q", event.Type, audit.EventDeliveryRuleCreated)
+	}
+}
+
 func TestUpdateRuleStatusValidatesStatus(t *testing.T) {
 	svc := NewDeliveryRuleService(&fakeRuleRepository{})
 
@@ -80,6 +106,34 @@ func TestUpdateRuleStatusValidatesStatus(t *testing.T) {
 	})
 
 	assertValidationError(t, err, "status", "supported_value")
+}
+
+func TestUpdateRuleStatusPublishesAuditEvent(t *testing.T) {
+	publisher := &fakeAuditPublisher{}
+	svc := NewDeliveryRuleServiceWithAudit(&fakeRuleRepository{}, publisher)
+
+	rule, err := svc.UpdateRuleStatus(context.Background(), UpdateRuleStatusCommand{
+		ShopID: 1,
+		ID:     2,
+		Status: model.DeliveryRuleStatusActive,
+	})
+	if err != nil {
+		t.Fatalf("UpdateRuleStatus() error = %v", err)
+	}
+
+	if len(publisher.events) != 1 {
+		t.Fatalf("published events = %d, want 1", len(publisher.events))
+	}
+	event := publisher.events[0]
+	if event.ShopID != rule.ShopID {
+		t.Fatalf("ShopID = %d, want %d", event.ShopID, rule.ShopID)
+	}
+	if event.DeliveryRuleID == nil || *event.DeliveryRuleID != rule.ID {
+		t.Fatalf("DeliveryRuleID = %v, want %d", event.DeliveryRuleID, rule.ID)
+	}
+	if event.Type != audit.EventDeliveryRuleStatusUpdated {
+		t.Fatalf("Type = %q, want %q", event.Type, audit.EventDeliveryRuleStatusUpdated)
+	}
 }
 
 func TestListRulesValidatesStatusFilter(t *testing.T) {
@@ -179,4 +233,13 @@ func (repo *fakeRuleRepository) ListRules(_ context.Context, _ repository.ListRu
 
 func (repo *fakeRuleRepository) UpdateRuleStatus(_ context.Context, shopID uint, id uint, status model.DeliveryRuleStatus) (*model.DeliveryRule, error) {
 	return &model.DeliveryRule{ID: id, ShopID: shopID, Status: status}, nil
+}
+
+type fakeAuditPublisher struct {
+	events []audit.Event
+}
+
+func (publisher *fakeAuditPublisher) Publish(_ context.Context, event audit.Event) error {
+	publisher.events = append(publisher.events, event)
+	return nil
 }
