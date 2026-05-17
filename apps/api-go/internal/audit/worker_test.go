@@ -173,6 +173,38 @@ func TestWorkerStopsWhenContextIsCanceled(t *testing.T) {
 	}
 }
 
+func TestWorkerDrainsBufferedEventsWhenContextIsCanceled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	store := &contextCheckingStore{created: make(chan *model.AuditLog, 2)}
+	worker := NewWorker(store, testWorkerConfig(2, OverflowBlock))
+
+	if err := worker.Publish(context.Background(), Event{
+		ShopID:  1,
+		Type:    EventDeliveryRuleCreated,
+		Message: "delivery rule created",
+	}); err != nil {
+		t.Fatalf("Publish() first error = %v", err)
+	}
+	if err := worker.Publish(context.Background(), Event{
+		ShopID:  1,
+		Type:    EventDeliveryRuleStatusUpdated,
+		Message: "delivery rule status updated",
+	}); err != nil {
+		t.Fatalf("Publish() second error = %v", err)
+	}
+
+	cancel()
+
+	err := worker.Run(ctx)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Run() error = %v, want context.Canceled", err)
+	}
+	if got := len(store.created); got != 2 {
+		t.Fatalf("drained audit logs = %d, want 2", got)
+	}
+}
+
 func TestPublishReturnsContextErrorWhenNoWorkerReceives(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	worker := NewWorker(
@@ -205,6 +237,18 @@ type fakeStore struct {
 }
 
 func (store *fakeStore) CreateAuditLog(_ context.Context, log *model.AuditLog) error {
+	store.created <- log
+	return nil
+}
+
+type contextCheckingStore struct {
+	created chan *model.AuditLog
+}
+
+func (store *contextCheckingStore) CreateAuditLog(ctx context.Context, log *model.AuditLog) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	store.created <- log
 	return nil
 }

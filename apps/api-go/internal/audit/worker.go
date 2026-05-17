@@ -10,7 +10,10 @@ import (
 	"smartdelivery/apps/api-go/internal/model"
 )
 
-const DefaultBufferSize = 100
+const (
+	DefaultBufferSize   = 100
+	DefaultDrainTimeout = 5 * time.Second
+)
 
 const (
 	EventDeliveryRuleCreated       = "delivery_rule.created"
@@ -43,14 +46,16 @@ type Config struct {
 	BufferSize       int
 	OverflowBehavior OverflowBehavior
 	Logger           *slog.Logger
+	DrainTimeout     time.Duration
 }
 
 type Worker struct {
-	store    Store
-	events   chan Event
-	overflow OverflowBehavior
-	logger   *slog.Logger
-	metrics  Metrics
+	store        Store
+	events       chan Event
+	overflow     OverflowBehavior
+	logger       *slog.Logger
+	drainTimeout time.Duration
+	metrics      Metrics
 }
 
 type MetricsSnapshot struct {
@@ -70,16 +75,18 @@ func NewWorker(store Store, configs ...Config) *Worker {
 		BufferSize:       DefaultBufferSize,
 		OverflowBehavior: OverflowBlock,
 		Logger:           slog.Default(),
+		DrainTimeout:     DefaultDrainTimeout,
 	}
 	if len(configs) > 0 {
 		cfg = configs[0].withDefaults()
 	}
 
 	return &Worker{
-		store:    store,
-		events:   make(chan Event, cfg.BufferSize),
-		overflow: cfg.OverflowBehavior,
-		logger:   cfg.Logger,
+		store:        store,
+		events:       make(chan Event, cfg.BufferSize),
+		overflow:     cfg.OverflowBehavior,
+		logger:       cfg.Logger,
+		drainTimeout: cfg.DrainTimeout,
 	}
 }
 
@@ -128,11 +135,20 @@ func (worker *Worker) Run(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return worker.shutdown(ctx)
+		default:
+		}
+
+		select {
 		case event := <-worker.events:
-			if err := worker.store.CreateAuditLog(ctx, event.toModel()); err != nil {
-				return fmt.Errorf("write audit log: %w", err)
+			if ctx.Err() != nil {
+				return worker.shutdown(ctx, event)
 			}
+			if err := worker.write(ctx, event); err != nil {
+				return err
+			}
+		case <-ctx.Done():
+			return worker.shutdown(ctx)
 		}
 	}
 }
@@ -147,7 +163,47 @@ func (cfg Config) withDefaults() Config {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
+	if cfg.DrainTimeout == 0 {
+		cfg.DrainTimeout = DefaultDrainTimeout
+	}
 	return cfg
+}
+
+func (worker *Worker) shutdown(ctx context.Context, pending ...Event) error {
+	drainCtx, cancel := context.WithTimeout(context.Background(), worker.drainTimeout)
+	defer cancel()
+
+	for _, event := range pending {
+		if err := worker.write(drainCtx, event); err != nil {
+			return err
+		}
+	}
+
+	if err := worker.drain(drainCtx); err != nil {
+		return err
+	}
+
+	return ctx.Err()
+}
+
+func (worker *Worker) drain(ctx context.Context) error {
+	for {
+		select {
+		case event := <-worker.events:
+			if err := worker.write(ctx, event); err != nil {
+				return err
+			}
+		default:
+			return nil
+		}
+	}
+}
+
+func (worker *Worker) write(ctx context.Context, event Event) error {
+	if err := worker.store.CreateAuditLog(ctx, event.toModel()); err != nil {
+		return fmt.Errorf("write audit log: %w", err)
+	}
+	return nil
 }
 
 func (event Event) toModel() *model.AuditLog {
