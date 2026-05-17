@@ -3,6 +3,7 @@ schema {
 }
 
 scalar JSON
+scalar Decimal
 
 type Input {
   deliveryCustomization: DeliveryCustomization!
@@ -18,7 +19,12 @@ type Metafield {
 }
 
 type Cart {
+  cost: CartCost!
   deliveryGroups: [CartDeliveryGroup!]!
+}
+
+type CartCost {
+  subtotalAmount: MoneyV2!
 }
 
 type CartDeliveryGroup {
@@ -34,13 +40,23 @@ type MailingAddress {
 type DeliveryOption {
   handle: String!
   title: String
+  code: String
+  cost: MoneyV2!
+}
+
+type MoneyV2 {
+  amount: Decimal!
 }
 
 type CartDeliveryOptionsTransformRunResult {
   operations: [Operation!]!
 }
 
-union Operation = DeliveryOptionHideOperation | DeliveryOptionRenameOperation | DeliveryOptionMoveOperation
+type Operation {
+  deliveryOptionHide: DeliveryOptionHideOperation
+  deliveryOptionRename: DeliveryOptionRenameOperation
+  deliveryOptionMove: DeliveryOptionMoveOperation
+}
 
 type DeliveryOptionHideOperation {
   deliveryOptionHandle: String!

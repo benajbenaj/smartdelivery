@@ -9,9 +9,8 @@ Important files:
 3. `src/lib.rs` wires Shopify Rust type generation.
 4. `src/run.rs` is the exported Rust function entrypoint.
 
-The current function is intentionally no-op: it returns an empty operations list.
-Future commits can read the compact config snapshot and turn active rules into
-hide, rename, or sort operations.
+The current function reads the compact config snapshot and returns hide
+operations for matching delivery rules. Rename and sort rules can be added later.
 
 `schema.graphql` is a minimal local schema for this skeleton. Refresh it from
 Shopify CLI before implementing real checkout behavior.

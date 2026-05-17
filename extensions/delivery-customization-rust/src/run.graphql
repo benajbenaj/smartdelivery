@@ -5,6 +5,11 @@ query Input {
     }
   }
   cart {
+    cost {
+      subtotalAmount {
+        amount
+      }
+    }
     deliveryGroups {
       deliveryAddress {
         countryCode
@@ -13,6 +18,10 @@ query Input {
       deliveryOptions {
         handle
         title
+        code
+        cost {
+          amount
+        }
       }
     }
   }
