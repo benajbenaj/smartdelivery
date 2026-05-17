@@ -1,0 +1,17 @@
+api_version = "2026-04"
+
+[[extensions]]
+name = "Smart Delivery Customization"
+handle = "smart-delivery-customization"
+type = "function"
+description = "Applies Smart Delivery rule snapshots to checkout delivery options."
+
+[[extensions.targeting]]
+target = "cart.delivery-options.transform.run"
+input_query = "src/run.graphql"
+export = "cart_delivery_options_transform_run"
+
+[extensions.build]
+command = "cargo build --target=wasm32-wasip1 --release"
+path = "target/wasm32-wasip1/release/smart_delivery_customization.wasm"
+watch = ["src/**/*.rs", "src/**/*.graphql", "schema.graphql", "Cargo.toml"]

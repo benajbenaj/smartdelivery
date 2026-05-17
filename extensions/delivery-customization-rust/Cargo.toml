@@ -1,0 +1,11 @@
+[package]
+name = "smart_delivery_customization"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+shopify_function = "2.1.0"

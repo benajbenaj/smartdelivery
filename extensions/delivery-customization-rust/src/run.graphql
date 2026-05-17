@@ -1,0 +1,19 @@
+query Input {
+  deliveryCustomization {
+    metafield(namespace: "$app:delivery-customization", key: "function-configuration") {
+      jsonValue
+    }
+  }
+  cart {
+    deliveryGroups {
+      deliveryAddress {
+        countryCode
+        zip
+      }
+      deliveryOptions {
+        handle
+        title
+      }
+    }
+  }
+}

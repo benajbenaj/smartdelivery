@@ -19,7 +19,6 @@ coverage.out
 
 # Rust
 target/
-Cargo.lock
 
 # Docker / local data
 docker/data/

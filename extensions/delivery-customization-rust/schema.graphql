@@ -1,0 +1,57 @@
+schema {
+  query: Input
+}
+
+scalar JSON
+
+type Input {
+  deliveryCustomization: DeliveryCustomization!
+  cart: Cart!
+}
+
+type DeliveryCustomization {
+  metafield(namespace: String!, key: String!): Metafield
+}
+
+type Metafield {
+  jsonValue: JSON!
+}
+
+type Cart {
+  deliveryGroups: [CartDeliveryGroup!]!
+}
+
+type CartDeliveryGroup {
+  deliveryAddress: MailingAddress
+  deliveryOptions: [DeliveryOption!]!
+}
+
+type MailingAddress {
+  countryCode: String
+  zip: String
+}
+
+type DeliveryOption {
+  handle: String!
+  title: String
+}
+
+type CartDeliveryOptionsTransformRunResult {
+  operations: [Operation!]!
+}
+
+union Operation = DeliveryOptionHideOperation | DeliveryOptionRenameOperation | DeliveryOptionMoveOperation
+
+type DeliveryOptionHideOperation {
+  deliveryOptionHandle: String!
+}
+
+type DeliveryOptionRenameOperation {
+  deliveryOptionHandle: String!
+  title: String!
+}
+
+type DeliveryOptionMoveOperation {
+  deliveryOptionHandle: String!
+  index: Int!
+}
