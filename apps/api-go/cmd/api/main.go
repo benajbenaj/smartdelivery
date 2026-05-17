@@ -39,7 +39,11 @@ func main() {
 	}()
 
 	ruleRepository := repository.NewDeliveryRuleRepository(database)
-	auditWorker := audit.NewWorker(audit.NewStore(database))
+	auditWorker := audit.NewWorker(audit.NewStore(database), audit.Config{
+		BufferSize:       cfg.Audit.BufferSize,
+		OverflowBehavior: audit.OverflowBehavior(cfg.Audit.OverflowBehavior),
+		Logger:           slog.Default(),
+	})
 	auditCtx, stopAudit := context.WithCancel(context.Background())
 	defer stopAudit()
 

@@ -3,6 +3,8 @@ package audit
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"testing"
 	"time"
 
@@ -14,7 +16,7 @@ func TestWorkerWritesAuditLog(t *testing.T) {
 	defer cancel()
 
 	store := &fakeStore{created: make(chan *model.AuditLog, 1)}
-	worker := NewWorker(store)
+	worker := NewWorker(store, testWorkerConfig(1, OverflowBlock))
 
 	go func() {
 		if err := worker.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
@@ -54,12 +56,71 @@ func TestWorkerWritesAuditLog(t *testing.T) {
 	}
 }
 
-func TestPublishUsesUnbufferedBackpressure(t *testing.T) {
+func TestPublishUsesBufferedChannel(t *testing.T) {
+	worker := NewWorker(
+		&fakeStore{created: make(chan *model.AuditLog, 1)},
+		testWorkerConfig(1, OverflowBlock),
+	)
+
+	if err := worker.Publish(context.Background(), Event{
+		ShopID:  1,
+		Type:    EventDeliveryRuleCreated,
+		Message: "delivery rule created",
+	}); err != nil {
+		t.Fatalf("Publish() error = %v", err)
+	}
+
+	metrics := worker.Metrics()
+	if metrics.Published != 1 {
+		t.Fatalf("Published = %d, want 1", metrics.Published)
+	}
+}
+
+func TestPublishDropsWhenBufferIsFull(t *testing.T) {
+	worker := NewWorker(
+		&fakeStore{created: make(chan *model.AuditLog, 1)},
+		testWorkerConfig(1, OverflowDrop),
+	)
+
+	if err := worker.Publish(context.Background(), Event{
+		ShopID:  1,
+		Type:    EventDeliveryRuleCreated,
+		Message: "delivery rule created",
+	}); err != nil {
+		t.Fatalf("Publish() first error = %v", err)
+	}
+	if err := worker.Publish(context.Background(), Event{
+		ShopID:  1,
+		Type:    EventDeliveryRuleStatusUpdated,
+		Message: "delivery rule status updated",
+	}); err != nil {
+		t.Fatalf("Publish() second error = %v", err)
+	}
+
+	metrics := worker.Metrics()
+	if metrics.Published != 1 {
+		t.Fatalf("Published = %d, want 1", metrics.Published)
+	}
+	if metrics.Dropped != 1 {
+		t.Fatalf("Dropped = %d, want 1", metrics.Dropped)
+	}
+}
+
+func TestPublishBlocksWhenBufferIsFull(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	store := &fakeStore{created: make(chan *model.AuditLog, 1)}
-	worker := NewWorker(store)
+	store := &fakeStore{created: make(chan *model.AuditLog, 2)}
+	worker := NewWorker(store, testWorkerConfig(1, OverflowBlock))
+
+	if err := worker.Publish(ctx, Event{
+		ShopID:  1,
+		Type:    EventDeliveryRuleCreated,
+		Message: "delivery rule created",
+	}); err != nil {
+		t.Fatalf("Publish() first error = %v", err)
+	}
+
 	published := make(chan error, 1)
 
 	go func() {
@@ -72,7 +133,7 @@ func TestPublishUsesUnbufferedBackpressure(t *testing.T) {
 
 	select {
 	case err := <-published:
-		t.Fatalf("Publish() completed before worker received event: %v", err)
+		t.Fatalf("Publish() completed before buffer had space: %v", err)
 	case <-time.After(20 * time.Millisecond):
 	}
 
@@ -90,13 +151,21 @@ func TestPublishUsesUnbufferedBackpressure(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for publish")
 	}
+
+	metrics := worker.Metrics()
+	if metrics.Blocked != 1 {
+		t.Fatalf("Blocked = %d, want 1", metrics.Blocked)
+	}
 }
 
 func TestWorkerStopsWhenContextIsCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	worker := NewWorker(&fakeStore{created: make(chan *model.AuditLog, 1)})
+	worker := NewWorker(
+		&fakeStore{created: make(chan *model.AuditLog, 1)},
+		testWorkerConfig(1, OverflowBlock),
+	)
 
 	err := worker.Run(ctx)
 	if !errors.Is(err, context.Canceled) {
@@ -106,9 +175,20 @@ func TestWorkerStopsWhenContextIsCanceled(t *testing.T) {
 
 func TestPublishReturnsContextErrorWhenNoWorkerReceives(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+	worker := NewWorker(
+		&fakeStore{created: make(chan *model.AuditLog, 1)},
+		testWorkerConfig(1, OverflowBlock),
+	)
 
-	worker := NewWorker(&fakeStore{created: make(chan *model.AuditLog, 1)})
+	if err := worker.Publish(context.Background(), Event{
+		ShopID:  1,
+		Type:    EventDeliveryRuleCreated,
+		Message: "delivery rule created",
+	}); err != nil {
+		t.Fatalf("Publish() first error = %v", err)
+	}
+
+	cancel()
 
 	err := worker.Publish(ctx, Event{
 		ShopID:  1,
@@ -127,4 +207,12 @@ type fakeStore struct {
 func (store *fakeStore) CreateAuditLog(_ context.Context, log *model.AuditLog) error {
 	store.created <- log
 	return nil
+}
+
+func testWorkerConfig(bufferSize int, overflow OverflowBehavior) Config {
+	return Config{
+		BufferSize:       bufferSize,
+		OverflowBehavior: overflow,
+		Logger:           slog.New(slog.NewTextHandler(io.Discard, nil)),
+	}
 }

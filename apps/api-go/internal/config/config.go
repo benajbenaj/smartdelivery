@@ -3,12 +3,16 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
+
 	"smartdelivery/apps/api-go/internal/apperr"
 )
 
 const (
-	defaultAppEnv = "development"
-	defaultPort   = "8080"
+	defaultAppEnv                = "development"
+	defaultPort                  = "8080"
+	defaultAuditBufferSize       = 100
+	defaultAuditOverflowBehavior = "block"
 )
 
 type Config struct {
@@ -16,6 +20,7 @@ type Config struct {
 	Port        string
 	DatabaseURL string
 	Shopify     ShopifyConfig
+	Audit       AuditConfig
 }
 
 type ShopifyConfig struct {
@@ -23,7 +28,17 @@ type ShopifyConfig struct {
 	APISecret string
 }
 
+type AuditConfig struct {
+	BufferSize       int
+	OverflowBehavior string
+}
+
 func Load() (Config, error) {
+	auditBufferSize, err := getEnvInt("AUDIT_BUFFER_SIZE", defaultAuditBufferSize)
+	if err != nil {
+		return Config{}, err
+	}
+
 	cfg := Config{
 		AppEnv:      getEnv("APP_ENV", defaultAppEnv),
 		Port:        getEnv("PORT", defaultPort),
@@ -31,6 +46,10 @@ func Load() (Config, error) {
 		Shopify: ShopifyConfig{
 			APIKey:    os.Getenv("SHOPIFY_API_KEY"),
 			APISecret: os.Getenv("SHOPIFY_API_SECRET"),
+		},
+		Audit: AuditConfig{
+			BufferSize:       auditBufferSize,
+			OverflowBehavior: getEnv("AUDIT_OVERFLOW_BEHAVIOR", defaultAuditOverflowBehavior),
 		},
 	}
 
@@ -42,6 +61,9 @@ func Load() (Config, error) {
 	}
 	if cfg.Shopify.APISecret == "" {
 		return Config{}, fmt.Errorf("%w: SHOPIFY_API_SECRET", apperr.ErrMissingConfig)
+	}
+	if cfg.Audit.OverflowBehavior != "block" && cfg.Audit.OverflowBehavior != "drop" {
+		return Config{}, fmt.Errorf("%w: AUDIT_OVERFLOW_BEHAVIOR", apperr.ErrValidation)
 	}
 
 	return cfg, nil
@@ -57,4 +79,17 @@ func getEnv(key string, fallback string) string {
 		return fallback
 	}
 	return value
+}
+
+func getEnvInt(key string, fallback int) (int, error) {
+	value := os.Getenv(key)
+	if value == "" {
+		return fallback, nil
+	}
+
+	parsed, err := strconv.Atoi(value)
+	if err != nil || parsed < 0 {
+		return 0, fmt.Errorf("%w: %s", apperr.ErrValidation, key)
+	}
+	return parsed, nil
 }
